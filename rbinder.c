@@ -211,6 +211,19 @@ void inject_headers(char *str, char *headers, char *newstr, int newstrsize) {
   newstr[newstrsize] = '\0';
 }
 
+int is_http_request(char *str) {
+  char *httpmeths[9] = {
+    "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"
+  };
+  int i;
+  for(i = 0; i < 9; i++) {
+    if(strncmp(str, httpmeths[i], strlen(httpmeths[i])) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 /*
  * tracee_t struct types & functions.
  */
@@ -371,8 +384,8 @@ int main(int argc, char **argv) {
         peek_syscall_thrargs(cid, params);
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
-        // Check if not strange syscall (maybe HTTP conn setup).
-        if(str[0] == '\024') {
+        // Check if HTTP request.
+        if(!is_http_request(str)) {
           trapsc(cid);
           continue;
         }
