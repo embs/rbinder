@@ -1,7 +1,6 @@
 from flask import Flask
 from flask import request
 import os
-import sys
 import requests
 import logging
 
