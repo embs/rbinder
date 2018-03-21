@@ -238,6 +238,10 @@ struct tracee_t {
 struct tracee_t *tracees = NULL;
 
 void add_tracee(struct tracee_t *s) {
+  int i;
+  for(i = 0; i < 1024; i++) {
+    s->socks[i] = 0;
+  }
   s->headers[0] = '\0';
   HASH_ADD_INT(tracees, id, s);
 }
