@@ -290,7 +290,7 @@ int main(int argc, char **argv) {
       }
 
       // Setup ptrace for tracing further children threads.
-      if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|\
+      if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
             PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
         perror("ptrace(PTRACE_SETOPTIONS)");
         exit(1);
