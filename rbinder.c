@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdio.h>
 
 #include <sys/ptrace.h>
 #include <sys/reg.h>
