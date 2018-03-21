@@ -54,3 +54,11 @@ Service 2 output
     Accept: */*
     X-Request-Id: 12345
     Accept-Encoding: gzip, deflate
+
+## Acknowledgement
+
+Thanks to [Envoy maintainers][envoy-maintainers] for their inspiring
+[examples][envoy-examples].
+
+[envoy-maintainers]: https://github.com/envoyproxy/envoy/blob/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/OWNERS.md
+[envoy-examples]: https://github.com/envoyproxy/envoy/tree/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/examples
