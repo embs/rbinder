@@ -386,6 +386,7 @@ int main(int argc, char **argv) {
         }
 
         peek_syscall_thrargs(cid, params);
+        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
         // Check if HTTP request.
