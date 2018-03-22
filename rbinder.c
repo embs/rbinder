@@ -18,6 +18,7 @@
 #define SCSENDTO(number)   (number == SYS_sendto)
 #define SCRECVFROM(number) (number == SYS_recvfrom)
 #define SCSHUTDOWN(number) (number == SYS_shutdown)
+#define SCACCEPT4(number)  (number == SYS_accept4)
 
 #define SCENTRY(code) (code == -ENOSYS)
 
@@ -333,12 +334,18 @@ int main(int argc, char **argv) {
       }
 
       // Extract headers from incoming request.
-      if(SCREAD(syscall_number)) {
-        peek_syscall_thrargs(cid, params);
+      if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
         tracee = find_tracee(cid);
 
-        // Check if tracee owns socket.
-        if(tracee && tracee->socks[params[ARG_SCRW_FD]] == 1) {
+        if(!tracee) {
+          trapsc(cid);
+          continue;
+        }
+
+        peek_syscall_thrargs(cid, params);
+
+        // Check if tracee owns socket & is not already servicing request.
+        if(tracee->socks[params[ARG_SCRW_FD]] == 1 && tracee->headers[0] == '\0') {
           str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
           peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
           extract_headers(str, tracee->headers);
@@ -365,7 +372,7 @@ int main(int argc, char **argv) {
       }
 
       // Add socket to tracee.
-      if(SCSOCKET(syscall_number) || SCACCEPT(syscall_number)) {
+      if(SCSOCKET(syscall_number) || SCACCEPT(syscall_number) || SCACCEPT4(syscall_number)) {
         tracee = find_tracee(cid);
         if(tracee) {
           add_sock(tracee, syscall_return);
