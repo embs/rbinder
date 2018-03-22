@@ -1,0 +1,13 @@
+FROM python:3.6-alpine
+
+RUN pip install flask requests && apk update && apk add gcc libc-dev
+
+ENV PORT=9876 SERVICE_NAME=1 SERVICE_2_HOST=service2
+
+COPY uthash.h uthash.h
+COPY ./demo/server.py server.py
+COPY rbinder.c rbinder.c
+
+RUN gcc -g -o rbinder rbinder.c
+
+CMD ./rbinder /usr/local/bin/python server.py

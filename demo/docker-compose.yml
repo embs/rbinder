@@ -1,0 +1,32 @@
+version: "3"
+
+networks:
+  rbindernet: {}
+
+services:
+  service1:
+    privileged: true
+    build:
+      context: ../
+      dockerfile: ./demo/Dockerfile-service1
+    cap_add:
+      - SYS_PTRACE
+    networks:
+      - rbindernet
+    expose:
+      - "9876"
+    ports:
+      - "9876:9876"
+
+  service2:
+    build:
+      context: ../
+      dockerfile: ./demo/Dockerfile-service2
+    networks:
+      rbindernet:
+        aliases:
+          - service2
+    expose:
+      - "9000"
+    ports:
+      - "9000:9000"
