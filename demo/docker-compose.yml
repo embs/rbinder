@@ -5,12 +5,9 @@ networks:
 
 services:
   service1:
-    privileged: true
     build:
       context: ../
       dockerfile: ./demo/Dockerfile-service1
-    cap_add:
-      - SYS_PTRACE
     networks:
       - rbindernet
     expose:
