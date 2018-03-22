@@ -11,7 +11,8 @@ def trace():
     logging.warning(request.headers)
     # call service 2 from service 1
     if int(os.environ['SERVICE_NAME']) == 1 :
-        ret = requests.get("http://localhost:9000/")
+        ret = requests.get("http://{}:9000/".format(
+            os.getenv('SERVICE_2_HOST', 'localhost')))
     return ('Hello from service {}!\n'.format(os.environ['SERVICE_NAME']))
 
 if __name__ == "__main__":

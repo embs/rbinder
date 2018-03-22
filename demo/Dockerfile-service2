@@ -1,0 +1,9 @@
+FROM python:3.6-alpine
+
+RUN pip install flask requests
+
+ENV PORT=9000 SERVICE_NAME=2
+
+COPY ./demo/server.py server.py
+
+CMD python server.py

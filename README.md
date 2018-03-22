@@ -55,6 +55,25 @@ Service 2 output
     X-Request-Id: 12345
     Accept-Encoding: gzip, deflate
 
+### In a Docker container
+
+    $ docker-compose -f ./demo/docker-compose.yml up -d --build
+
+Request to service 1 with tracing headers
+
+    $ curl -H "X-Request-Id: 12345" localhost:9876
+
+Service 2 logs
+
+    $ docker-compose -f ./demo/docker-compose.yml logs service2
+
+    service2_1  | WARNING:root:Host: service2:9000
+    service2_1  | User-Agent: python-requests/2.18.4
+    service2_1  | Accept-Encoding: gzip, deflate
+    service2_1  | Accept: */*
+    service2_1  | Connection: keep-alive
+    service2_1  | X-Request-Id: 12345
+
 ## Acknowledgement
 
 Thanks to [Envoy maintainers][envoy-maintainers] for their inspiring
