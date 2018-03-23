@@ -19,11 +19,12 @@ services:
 
   service1:
     build:
-      context: .
-      dockerfile: Dockerfile-service
+      context: ../../
+      dockerfile: "./demo/instrumented_services/Dockerfile-service${RBINDER}"
     environment:
       SERVICE_NAME: 1
       PORT: 9876
+      SKIP_INSERVICE_PROPAGATION: "${RBINDER}"
     networks:
       rbindernet:
         aliases:
@@ -35,8 +36,8 @@ services:
 
   service2:
     build:
-      context: .
-      dockerfile: Dockerfile-service
+      context: ../../
+      dockerfile: ./demo/instrumented_services/Dockerfile-service
     environment:
       SERVICE_NAME: 2 
       PORT: 9000

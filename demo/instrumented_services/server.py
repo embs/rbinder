@@ -40,18 +40,20 @@ def extract_zipkin_attrs(headers):
 @app.route('/')
 def trace():
     headers = {}
-    for header in TRACE_HEADERS_TO_PROPAGATE:
-        if header in request.headers:
-            headers[header] = request.headers[header]
+    if not os.getenv('SKIP_INSERVICE_PROPAGATION', False):
+        for header in TRACE_HEADERS_TO_PROPAGATE:
+            if header in request.headers:
+                headers[header] = request.headers[header]
 
     with zipkin_span(
             service_name='service{}'.format(os.environ['SERVICE_NAME']),
             span_name='service',
             transport_handler=http_transport,
             port=int(os.environ['PORT']),
-            zipkin_attrs=extract_zipkin_attrs(headers)):
+            zipkin_attrs=extract_zipkin_attrs(request.headers)):
         if int(os.environ['SERVICE_NAME']) == 1 :
             requests.get("http://service2:9000/", headers=headers)
+
         return ('Hello from service {}!\n'.format(os.environ['SERVICE_NAME']))
 
 if __name__ == "__main__":

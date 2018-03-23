@@ -86,6 +86,12 @@ Scenario
 - Service 1 needs requesting something from 2 to fulfill its received requests
 - Code for services instrumented with [py_zipkin][py_zipkin]
 
+### Without rbinder
+
+Scenario
+
+- Service 1 propagate tracing headers by itself
+
 Run
 
     $ docker-compose -f ./demo/instrumented_services/docker-compose.yml up -d --build
@@ -93,6 +99,20 @@ Run
 Request
 
     $ curl localhost:8000
+
+Check Zipkin web interface
+
+    http://localhost:9411/
+
+### With rbinder
+
+Scenario
+
+- rbinder is used for progating headers through service 1 calls
+
+Run
+
+    $ RBINDER=1 docker-compose -f ./demo/instrumented_services/docker-compose.yml up -d --build
 
 Check Zipkin web interface
 

@@ -2,6 +2,6 @@ FROM python:3.6-alpine
 
 RUN apk update && apk add gcc musl-dev && pip install flask requests py_zipkin
 
-COPY server.py server.py
+COPY ./demo/instrumented_services/server.py server.py
 
 CMD python server.py
