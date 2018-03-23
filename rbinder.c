@@ -159,9 +159,9 @@ void extract_headers(char *str, char *headers) {
 
       // Still didn't match entire header.
       if(matchidx < strlen(cheader)) {
-        if(tolower(cchar) == cheader[matchidx]) { // match
+        if(tolower(cchar) == cheader[matchidx]) {
           ++matchidx;
-        } else {                         // non-match
+        } else {
           matchidx = -1;
         }
       }
