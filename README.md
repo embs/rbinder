@@ -74,10 +74,36 @@ Service 2 logs
     service2_1  | Connection: keep-alive
     service2_1  | X-Request-Id: 12345
 
+## Instrumented services demo
+
+*regarding stuff in this [dir](demo/instrumented_services/)*
+
+Scenario
+
+- Front [Envoy][envoy] for generating tracing headers
+  - it forwards all incoming requests to service 1
+- 2 back-end services (1 & 2)
+- Service 1 needs requesting something from 2 to fulfill its received requests
+- Code for services instrumented with [py_zipkin][py_zipkin]
+
+Run
+
+    $ docker-compose -f ./demo/instrumented_services/docker-compose.yml up -d --build
+
+Request
+
+    $ curl localhost:8000
+
+Check Zipkin web interface
+
+    http://localhost:9411/
+
 ## Acknowledgement
 
 Thanks to [Envoy maintainers][envoy-maintainers] for their inspiring
 [examples][envoy-examples].
 
+[envoy]: https://www.envoyproxy.io/
+[py_zipkin]: https://github.com/Yelp/py_zipkin/
 [envoy-maintainers]: https://github.com/envoyproxy/envoy/blob/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/OWNERS.md
 [envoy-examples]: https://github.com/envoyproxy/envoy/tree/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/examples

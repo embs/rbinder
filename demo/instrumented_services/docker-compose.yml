@@ -1,0 +1,61 @@
+version: "3"
+
+networks:
+  rbindernet: {}
+
+services:
+  front-envoy:
+    build:
+      context: .
+      dockerfile: Dockerfile-frontenvoy
+    volumes:
+      - ./front-envoy-zipkin.yaml:/etc/front-envoy.yaml
+    networks:
+      - rbindernet
+    expose:
+      - "80"
+    ports:
+      - "8000:80"
+
+  service1:
+    build:
+      context: .
+      dockerfile: Dockerfile-service
+    environment:
+      SERVICE_NAME: 1
+      PORT: 9876
+    networks:
+      rbindernet:
+        aliases:
+          - service1
+    expose:
+      - "9876"
+    ports:
+      - "9876:9876"
+
+  service2:
+    build:
+      context: .
+      dockerfile: Dockerfile-service
+    environment:
+      SERVICE_NAME: 2 
+      PORT: 9000
+    networks:
+      rbindernet:
+        aliases:
+          - service2
+    expose:
+      - "9000"
+    ports:
+      - "9000:9000"
+
+  zipkin:
+    image: openzipkin/zipkin
+    networks:
+      rbindernet:
+        aliases:
+          - zipkin
+    expose:
+      - "9411"
+    ports:
+      - "9411:9411"
