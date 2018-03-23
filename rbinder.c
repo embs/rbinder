@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 
@@ -44,13 +45,13 @@
 const int long_size = sizeof(long);
 
 const char *fine_headers[] = {
-  "X-Ot-Span-Context",
-  "X-Request-Id",
-  "X-B3-TraceId",
-  "X-B3-SpanId",
-  "X-B3-ParentSpanId",
-  "X-B3-Sampled",
-  "X-B3-Flags"
+  "x-ot-span-context",
+  "x-request-id",
+  "x-b3-traceid",
+  "x-b3-spanid",
+  "x-b3-parentspanid",
+  "x-b3-sampled",
+  "x-b3-flags"
 };
 
 /*
@@ -158,7 +159,7 @@ void extract_headers(char *str, char *headers) {
 
       // Still didn't match entire header.
       if(matchidx < strlen(cheader)) {
-        if(cchar == cheader[matchidx]) { // match
+        if(tolower(cchar) == cheader[matchidx]) { // match
           ++matchidx;
         } else {                         // non-match
           matchidx = -1;
