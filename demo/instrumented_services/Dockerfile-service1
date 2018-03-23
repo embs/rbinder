@@ -1,0 +1,11 @@
+FROM python:3.6-alpine
+
+RUN apk update && apk add gcc libc-dev && pip install flask requests py_zipkin
+
+COPY uthash.h uthash.h
+COPY ./demo/instrumented_services/server.py server.py
+COPY rbinder.c rbinder.c
+
+RUN gcc -o rbinder rbinder.c
+
+CMD ./rbinder /usr/local/bin/python server.py
