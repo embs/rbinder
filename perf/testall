@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -e -v
+
+rm -f ./log/*
+RBINDER='' ./reset
+SCENARIO=none ./test
+RBINDER=1 ./reset
+SCENARIO=rbinder ./test
+./plot.r

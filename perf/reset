@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+function dock {
+  sshpass -p 123!qwe! ssh root@192.168.122.93 \
+    RBINDER=$RBINDER docker-compose \
+    -f ./rbinder/demo/instrumented_services/docker-compose.yml $1
+}
+
+dock down
+dock "up -d --build"
+
+while true
+do
+  dock "logs zipkin" | grep Started && break
+  sleep 1
+done

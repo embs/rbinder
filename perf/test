@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+if ! [[ -n $SCENARIO ]]; then
+  echo 'Missing SCENARIO'
+  exit 1
+fi
+
+for i in {1..1000}; do
+  curl \
+    -s 'alp:8000' \
+    -w "%{time_total},%{http_code}\n" \
+    -o /dev/null >> log/$SCENARIO.log
+done

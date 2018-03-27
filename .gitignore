@@ -1,2 +1,4 @@
 rbinder
 tmp/
+log/
+plots/
