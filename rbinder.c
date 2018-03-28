@@ -296,6 +296,16 @@ int main(int argc, char **argv) {
   // injecting them into outgoing requests performed while request is being
   // serviced.
   else {
+    // Setup ptrace for tracing further children threads.
+    cid = waitpid(-1, &status, __WALL);
+    if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
+          PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
+      perror("ptrace(PTRACE_SETOPTIONS)");
+      exit(1);
+    }
+    // Listen to next child syscall.
+    trapsc(cid);
+
     while(1) {
       // Wait for tracees' activity.
       cid = waitpid(-1, &status, __WALL);
@@ -307,13 +317,6 @@ int main(int argc, char **argv) {
           rmtracee(tracee);
         }
         continue;
-      }
-
-      // Setup ptrace for tracing further children threads.
-      if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
-            PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
-        perror("ptrace(PTRACE_SETOPTIONS)");
-        exit(1);
       }
 
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
