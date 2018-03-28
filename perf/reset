@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
 
-function dock {
-  sshpass -p 123!qwe! ssh root@192.168.122.93 \
-    RBINDER=$RBINDER docker-compose \
-    -f ./rbinder/demo/instrumented_services/docker-compose.yml $1
+DEMODIR=./rbinder/demo
+DEMOCOMPOSE=$DEMODIR/$DEMO/docker-compose.yml
+
+function sshcmd {
+  sshpass -p 123!qwe! ssh root@192.168.122.93 $1
 }
 
-dock down
-dock "up -d --build"
+function composefiles {
+  sshcmd "find $DEMODIR -name docker-compose.yml"
+}
 
-while true
-do
-  dock "logs zipkin" | grep Started && break
+function dock {
+  sshcmd "RBINDER=$RBINDER docker-compose -f $1 $2"
+}
+
+for file in $(composefiles); do
+  dock $file down
+done
+
+dock $DEMOCOMPOSE "up -d --build"
+
+while true; do
+  dock $DEMOCOMPOSE "logs zipkin" | grep Started && break
   sleep 1
 done

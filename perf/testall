@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 
+INSTRUMENTED=instrumented_services
+PROXIED=proxied_services
+
 set -e -v
 
 rm -f ./log/*
-RBINDER='' ./reset
+DEMO=$INSTRUMENTED RBINDER='' ./reset
 SCENARIO=none ./test
-RBINDER=1 ./reset
+DEMO=$INSTRUMENTED RBINDER=1 ./reset
 SCENARIO=rbinder ./test
+DEMO=$PROXIED RBINDER='' ./reset
+SCENARIO=envoy ./test
+DEMO=$PROXIED RBINDER=1 ./reset
+SCENARIO=envoy_rbinder ./test
 ./plot.r

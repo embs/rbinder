@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+for log in log/*.log; do
+  grep ",50" $log && echo Failed request in $log && exit 1
+done

@@ -2,9 +2,11 @@
 
 library(ggplot2)
 
-scenarios <- c('none', 'rbinder')
+scenarios <- sub('.log', '', list.files('./log'))
 means = c()
 errs = c()
+plotsdir <- './plots/'
+dir.create(plotsdir, showWarnings=FALSE)
 
 for(scenario in scenarios) {
   filename <- paste('./log/', scenario, '.log', sep='')
@@ -15,7 +17,7 @@ for(scenario in scenarios) {
   errs[scenario] = error
 
   # Boxplot.
-  png(filename=paste('./plots/', scenario, '-boxplot.png', sep=''))
+  png(filename=paste(plotsdir, scenario, '-boxplot.png', sep=''))
   boxplot(data$V1)
   dev.off()
 }
@@ -28,6 +30,6 @@ plot <- ggplot(data=plotdata, aes(x=scenario, y=mean)) +
                 geom_errorbar(aes(ymin=mean-err, ymax=mean+err),
                               width=.2,
                               position=position_dodge(.9))
-png(filename='./plots/means.png')
+png(filename=paste(plotsdir, 'means.png', sep=''))
 print(plot)
 dev.off()
