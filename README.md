@@ -118,6 +118,46 @@ Check Zipkin web interface
 
     http://localhost:9411/
 
+## Proxied services demo
+
+*regarding stuff in this [dir](demo/proxied_services/)*
+
+Scenario
+
+- Front [Envoy][envoy] for generating tracing headers
+  - it forwards all incoming requests to service 1
+- 2 back-end services (1 & 2)
+- Service 1 needs requesting something from 2 to fulfill its received requests
+- Spans are sent to [Zipkin][zipkin] through [Envoy][envoy] proxies
+
+### Without rbinder
+
+Scenario
+
+- Service 1 propagate tracing headers by itself
+
+Run
+
+    $ RBINDER='' docker-compose -f ./demo/proxied_services/docker-compose.yml up -d --build
+
+Request
+
+    $ curl localhost:8000
+
+### With rbinder
+
+Scenario
+
+- rbinder is used for progating headers through service 1 calls
+
+Run
+
+    $ RBINDER=1 docker-compose -f ./demo/proxied_services/docker-compose.yml up -d --build
+
+Request
+
+    $ curl localhost:8000
+
 ## Acknowledgement
 
 Thanks to [Envoy maintainers][envoy-maintainers] for their inspiring
@@ -127,3 +167,4 @@ Thanks to [Envoy maintainers][envoy-maintainers] for their inspiring
 [py_zipkin]: https://github.com/Yelp/py_zipkin/
 [envoy-maintainers]: https://github.com/envoyproxy/envoy/blob/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/OWNERS.md
 [envoy-examples]: https://github.com/envoyproxy/envoy/tree/2d0e70d3d0b82ed02d514e44fa8b3a52663f3d40/examples
+[zipkin]: https://zipkin.io/

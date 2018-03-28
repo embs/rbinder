@@ -1,0 +1,12 @@
+FROM envoyproxy/envoy-alpine:latest
+
+RUN apk update && apk add python3 bash gcc libc-dev
+RUN pip3 install -q Flask==0.11.1 requests==2.18.4
+RUN mkdir /code
+ADD ./demo/proxied_services/service.py /code
+ADD ./demo/proxied_services/start_service.sh /usr/local/bin/start_service.sh
+RUN chmod u+x /usr/local/bin/start_service.sh
+ADD uthash.h /code
+ADD rbinder.c /code
+RUN gcc -o rbinder /code/rbinder.c
+ENTRYPOINT /usr/local/bin/start_service.sh

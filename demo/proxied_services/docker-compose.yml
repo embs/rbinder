@@ -1,0 +1,62 @@
+version: '3'
+
+networks:
+  rbindernet: {}
+
+services:
+
+  front-envoy:
+    build:
+      context: ./
+      dockerfile: Dockerfile-frontenvoy
+    volumes:
+      - ./front-envoy-zipkin.yaml:/etc/front-envoy.yaml
+    networks:
+      - rbindernet
+    expose:
+      - "80"
+    ports:
+      - "8000:80"
+
+  service1:
+    build:
+      context: ../../
+      dockerfile: ./demo/proxied_services/Dockerfile-service
+    volumes:
+      - ./service1-envoy-zipkin.yaml:/etc/service-envoy.yaml
+    networks:
+      rbindernet:
+        aliases:
+          - service1
+    environment:
+      SERVICE_NAME: 1
+      RBINDER: "${RBINDER}"
+      SKIP_INSERVICE_PROPAGATION: "${RBINDER}"
+    expose:
+      - "80"
+
+  service2:
+    build:
+      context: ../../
+      dockerfile: ./demo/proxied_services/Dockerfile-service
+    volumes:
+      - ./service2-envoy-zipkin.yaml:/etc/service-envoy.yaml
+    networks:
+      rbindernet:
+        aliases:
+          - service2
+    environment:
+      - SERVICE_NAME=2
+    expose:
+      - "80"
+
+  zipkin:
+    image: openzipkin/zipkin
+    networks:
+      rbindernet:
+        aliases:
+          - zipkin
+    expose:
+      - "9411"
+    ports:
+      - "9411:9411"
