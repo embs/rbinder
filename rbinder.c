@@ -322,6 +322,12 @@ int main(int argc, char **argv) {
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
+      if(!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number) && HASH_COUNT(tracees) == 0) {
+        trapsc(cid);
+        continue;
+      }
+
+
       // Skip if syscall-entry-stop.
       if(SCENTRY(syscall_return)) {
 
