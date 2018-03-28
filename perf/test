@@ -7,6 +7,8 @@ if ! [[ -n $SCENARIO ]]; then
   exit 1
 fi
 
+mkdir -p log/
+
 for i in {1..1000}; do
   curl \
     -s 'alp:8000' \
