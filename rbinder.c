@@ -312,15 +312,6 @@ int main(int argc, char **argv) {
       // Wait for tracees' activity.
       cid = waitpid(-1, &status, __WALL);
 
-      // Remove tracee if it exists.
-      if(WIFEXITED(status)) {
-        struct tracee_t *tracee = find_tracee(cid);
-        if(tracee) {
-          rmtracee(tracee);
-        }
-        continue;
-      }
-
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
