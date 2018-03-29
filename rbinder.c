@@ -315,6 +315,9 @@ int main(int argc, char **argv) {
         add_tracee(&tracee);
         extract_headers(str, tracee.headers);
         free(str);
+
+        trapsc(cid);
+        continue;
       }
 
       // Inject headers into outgoing requests.
