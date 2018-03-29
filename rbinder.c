@@ -286,10 +286,13 @@ int main(int argc, char **argv) {
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
       // Skip if
+      //   - none of interesting syscalls
       //   - enter-stop for any syscall other than SENDTO;
       //   - exit-stop for SENDTO; or
       //   - none tracees and syscall does not trigger tracee creation
-      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
+      if((!SCREAD(syscall_number) && !SCRECVFROM(syscall_number) && \
+            !SCSENDTO(syscall_number)) || \
+          (SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
           (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
           (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {
         trapsc(cid);
