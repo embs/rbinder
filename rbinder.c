@@ -324,23 +324,13 @@ int main(int argc, char **argv) {
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
-      if(!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number) && HASH_COUNT(tracees) == 0) {
-        trapsc(cid);
-        continue;
-      }
-
-
-      // Skip if syscall-entry-stop.
-      if(SCENTRY(syscall_return)) {
-
-        // Except for sys_write, which we want modify for injecting headers...
-        if(!SCSENDTO(syscall_number)) {
-          trapsc(cid);
-          continue;
-        }
-      }
-      // ...and don't care about its syscall-exit-stop.
-      else if(SCSENDTO(syscall_number)) {
+      // Skip if
+      //   - enter-stop for any syscall other than SENDTO;
+      //   - exit-stop for SENDTO; or
+      //   - none tracees and syscall does not trigger tracee creation
+      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
+          (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
+          (!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number) && HASH_COUNT(tracees) == 0)) {
         trapsc(cid);
         continue;
       }
