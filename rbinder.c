@@ -311,10 +311,10 @@ int main(int argc, char **argv) {
     while(1) {
       // Wait for tracees' activity.
       cid = waitpid(-1, &status, __WALL);
-      struct tracee_t *tracee = find_tracee(cid);
 
       // Remove tracee if it exists.
       if(WIFEXITED(status)) {
+        struct tracee_t *tracee = find_tracee(cid);
         if(tracee) {
           rmtracee(tracee);
         }
@@ -324,36 +324,9 @@ int main(int argc, char **argv) {
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
-      if(tracee == NULL) {
-        if(!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number)) {
-          trapsc(cid);
-          continue;
-        }
-      } else {
-        // Tracee isn't servicing request.
-        if(tracee->headers[0] == '\0') {
-          // Tracee doesn't own any sockets.
-          if(tracee->socks_count == 0) {
-            if(!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number)) {
-              trapsc(cid);
-              continue;
-            }
-          }
-          // Tracee owns sockets.
-          else {
-            if(!SCREAD(syscall_number) && !SCACCEPT(syscall_number) && !SCRECVFROM(syscall_number) && !SCCLOSE(syscall_number) && !SCDUP(syscall_number)) {
-              trapsc(cid);
-              continue;
-            }
-          }
-        }
-        // Tracee is servicing request.
-        else {
-          if(!SCSOCKET(syscall_number) && !SCSENDTO(syscall_number) && !SCSHUTDOWN(syscall_number)) {
-            trapsc(cid);
-            continue;
-          }
-        }
+      if(!SCSOCKET(syscall_number) && !SCACCEPT(syscall_number) && !SCACCEPT4(syscall_number) && HASH_COUNT(tracees) == 0) {
+        trapsc(cid);
+        continue;
       }
 
 
@@ -374,6 +347,13 @@ int main(int argc, char **argv) {
 
       // Extract headers from incoming request.
       if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
+        tracee = find_tracee(cid);
+
+        if(!tracee) {
+          trapsc(cid);
+          continue;
+        }
+
         peek_syscall_thrargs(cid, params);
 
         // Check if tracee owns socket & is not already servicing request.
@@ -388,6 +368,7 @@ int main(int argc, char **argv) {
       // Remove socket from tracee.
       if(SCCLOSE(syscall_number)) {
         fd = ptrace(PTRACE_PEEKUSER, cid, REG_SC_FRSTARG, NULL);
+        tracee = find_tracee(cid);
         if(tracee && tracee->socks[fd]==1) {
           rmsock(tracee, fd);
         }
@@ -395,6 +376,7 @@ int main(int argc, char **argv) {
 
       // Add dupped socket to tracee if it is a dup from already owned socket.
       if(SCDUP(syscall_number)) {
+        tracee = find_tracee(cid);
         fd = ptrace(PTRACE_PEEKUSER, cid, 8 * RDI, NULL);
         if(tracee && tracee->socks[fd]) {
           add_sock(tracee, syscall_return);
@@ -403,6 +385,7 @@ int main(int argc, char **argv) {
 
       // Add socket to tracee.
       if(SCSOCKET(syscall_number) || SCACCEPT(syscall_number) || SCACCEPT4(syscall_number)) {
+        tracee = find_tracee(cid);
         if(tracee) {
           add_sock(tracee, syscall_return);
         } else {
@@ -414,6 +397,11 @@ int main(int argc, char **argv) {
 
       // Inject headers when performing request while servicing another one.
       if(SCSENDTO(syscall_number)) {
+        tracee = find_tracee(cid);
+        if(!tracee) {
+          continue;
+        }
+
         peek_syscall_thrargs(cid, params);
         str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
@@ -435,6 +423,7 @@ int main(int argc, char **argv) {
 
       // Nullify tracee headers as per request completion.
       if(SCSHUTDOWN(syscall_number)) {
+        tracee = find_tracee(cid);
         if(!tracee) {
           continue;
         }
