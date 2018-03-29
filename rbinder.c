@@ -338,21 +338,17 @@ int main(int argc, char **argv) {
       // Extract headers from incoming request.
       if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
         tracee = find_tracee(cid);
+        peek_syscall_thrargs(cid, params);
+        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
-        if(!tracee) {
+        if(!is_http_request(str)) {
           trapsc(cid);
           continue;
         }
 
-        peek_syscall_thrargs(cid, params);
-
-        // Check if tracee owns socket & is not already servicing request.
-        if(tracee->socks[params[ARG_SCRW_FD]] == 1 && tracee->headers[0] == '\0') {
-          str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-          peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-          extract_headers(str, tracee->headers);
-          free(str);
-        }
+        extract_headers(str, tracee->headers);
+        free(str);
       }
 
       // Remove socket from tracee.
