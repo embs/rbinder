@@ -6,6 +6,6 @@ COPY uthash.h uthash.h
 COPY ./demo/instrumented_services/server.py server.py
 COPY rbinder.c rbinder.c
 
-RUN gcc -O3 -o rbinder rbinder.c
+RUN gcc -O2 -o rbinder rbinder.c
 
 CMD ./rbinder /usr/local/bin/python server.py
