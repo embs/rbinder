@@ -239,11 +239,13 @@ struct tracee_t {
 
 struct tracee_t *tracees = NULL;
 
-void add_tracee(struct tracee_t *s) {
+void add_tracee(struct tracee_t *s, int sock) {
   int i;
   for(i = 0; i < 1024; i++) {
     s->socks[i] = 0;
   }
+  s->socks[sock] = 1;
+  s->socks_count = 1;
   s->headers[0] = '\0';
   HASH_ADD_INT(tracees, id, s);
 }
@@ -389,9 +391,7 @@ int main(int argc, char **argv) {
         } else {
           struct tracee_t tracee;
           tracee.id = cid;
-          tracee.socks[0] = syscall_return;
-          tracee.socks_count = 1;
-          add_tracee(&tracee);
+          add_tracee(&tracee, syscall_return);
         }
       }
 
