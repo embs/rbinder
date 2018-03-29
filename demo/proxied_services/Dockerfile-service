@@ -8,5 +8,5 @@ ADD ./demo/proxied_services/start_service.sh /usr/local/bin/start_service.sh
 RUN chmod u+x /usr/local/bin/start_service.sh
 ADD uthash.h /code
 ADD rbinder.c /code
-RUN gcc -o rbinder /code/rbinder.c
+RUN gcc -O3 -o rbinder /code/rbinder.c
 ENTRYPOINT /usr/local/bin/start_service.sh
