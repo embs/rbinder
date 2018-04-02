@@ -282,55 +282,6 @@ int main(int argc, char **argv) {
       // Wait for tracees' activity.
       cid = waitpid(-1, &status, __WALL);
 
-      syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
-      syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
-
-      // Skip if
-      //   - enter-stop for any syscall other than SENDTO;
-      //   - exit-stop for SENDTO; or
-      //   - none tracees and syscall does not trigger tracee creation
-      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
-          (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
-          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
-
-      // Extract headers from incoming request.
-      else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
-        peek_syscall_thrargs(cid, params);
-        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-
-        if(!is_http_request(str)) {
-          trapsc(cid);
-          continue;
-        }
-
-        struct tracee_t tracee;
-        tracee.id = cid;
-        add_tracee(&tracee);
-        extract_headers(str, tracee.headers);
-        free(str);
-      }
-
-      // Inject headers into outgoing requests.
-      else if(SCSENDTO(syscall_number)) {
-        tracee = find_tracee(cid);
-        peek_syscall_thrargs(cid, params);
-        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-
-        // Check if HTTP request.
-        if(!is_http_request(str)) {
-          trapsc(cid);
-          continue;
-        }
-
-        int newstrsize = strlen(str) + strlen(tracee->headers);
-        char newstr[newstrsize];
-        inject_headers(str, tracee->headers, newstr, newstrsize);
-        pokedata(cid, params[1], newstr, newstrsize);
-        free(str);
-      }
-
       // Listen to next child syscall.
       trapsc(cid);
     }
