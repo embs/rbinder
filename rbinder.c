@@ -260,8 +260,80 @@ int main(int argc, char **argv) {
 
   // Start server within traced thread (just like a gdb inferior).
   if(child == 0) {
+    ptrace(PTRACE_TRACEME, NULL, NULL, NULL);
+    kill(getpid(), SIGSTOP);
     execv(argv[1], argv + 1);
-  } else {
+  }
+  // Watch server syscalls for extracting incoming request tracing headers and
+  // injecting them into outgoing requests performed while request is being
+  // serviced.
+  else {
+    // Setup ptrace for tracing further children threads.
+    cid = waitpid(-1, &status, __WALL);
+    if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
+          PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
+      perror("ptrace(PTRACE_SETOPTIONS)");
+      exit(1);
+    }
+    // Listen to next child syscall.
+    trapsc(cid);
+
+    while(1) {
+      // Wait for tracees' activity.
+      cid = waitpid(-1, &status, __WALL);
+
+      syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
+      syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
+
+      // Skip if
+      //   - enter-stop for any syscall other than SENDTO;
+      //   - exit-stop for SENDTO; or
+      //   - none tracees and syscall does not trigger tracee creation
+      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
+          (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
+          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
+
+      // Extract headers from incoming request.
+      else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
+        peek_syscall_thrargs(cid, params);
+        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+
+        if(!is_http_request(str)) {
+          trapsc(cid);
+          continue;
+        }
+
+        struct tracee_t tracee;
+        tracee.id = cid;
+        add_tracee(&tracee);
+        extract_headers(str, tracee.headers);
+        free(str);
+      }
+
+      // Inject headers into outgoing requests.
+      else if(SCSENDTO(syscall_number)) {
+        tracee = find_tracee(cid);
+        peek_syscall_thrargs(cid, params);
+        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+
+        // Check if HTTP request.
+        if(!is_http_request(str)) {
+          trapsc(cid);
+          continue;
+        }
+
+        int newstrsize = strlen(str) + strlen(tracee->headers);
+        char newstr[newstrsize];
+        inject_headers(str, tracee->headers, newstr, newstrsize);
+        pokedata(cid, params[1], newstr, newstrsize);
+        free(str);
+      }
+
+      // Listen to next child syscall.
+      trapsc(cid);
+    }
   }
 
   return 0;
