@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 
+NO_TRACING=no_tracing
 INSTRUMENTED=instrumented_services
 PROXIED=proxied_services
 
 set -e -v
 
 rm -f ./log/*
+DEMO=$NO_TRACING RBINDER='' ./reset
+SCENARIO=0_no_tracing ./test
 DEMO=$INSTRUMENTED RBINDER='' ./reset
-SCENARIO=none ./test
+SCENARIO=1_1_instrumented ./test
 DEMO=$INSTRUMENTED RBINDER=1 ./reset
-SCENARIO=rbinder ./test
+SCENARIO=1_2_rbinder ./test
 DEMO=$PROXIED RBINDER='' ./reset
-SCENARIO=envoy ./test
+SCENARIO=2_1_envoy ./test
 DEMO=$PROXIED RBINDER=1 ./reset
-SCENARIO=envoy_rbinder ./test
+SCENARIO=2_2_envoy_rbinder ./test
 ./plot.r
