@@ -291,13 +291,10 @@ int main(int argc, char **argv) {
       //   - none tracees and syscall does not trigger tracee creation
       if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
           (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
-          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {
-        trapsc(cid);
-        continue;
-      }
+          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
 
       // Extract headers from incoming request.
-      if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
+      else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
         peek_syscall_thrargs(cid, params);
         str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
@@ -315,7 +312,7 @@ int main(int argc, char **argv) {
       }
 
       // Inject headers into outgoing requests.
-      if(SCSENDTO(syscall_number)) {
+      else if(SCSENDTO(syscall_number)) {
         tracee = find_tracee(cid);
         peek_syscall_thrargs(cid, params);
         str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
