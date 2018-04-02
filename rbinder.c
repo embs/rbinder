@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
   int status, fd, i;
   void *buf;
   size_t len;
-  long syscall_number;
+  long syscall_number, syscall_return;
   long params[3];
   char *str;
   struct tracee_t *tracee;
@@ -283,6 +283,18 @@ int main(int argc, char **argv) {
       cid = waitpid(-1, &status, __WALL);
 
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
+      syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
+
+      // Skip if
+      //   - enter-stop for any syscall other than SENDTO;
+      //   - exit-stop for SENDTO; or
+      //   - none tracees and syscall does not trigger tracee creation
+      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
+          (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
+          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {
+        trapsc(cid);
+        continue;
+      }
 
       // Extract headers from incoming request.
       if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
@@ -303,7 +315,7 @@ int main(int argc, char **argv) {
       }
 
       // Inject headers into outgoing requests.
-      else if(SCSENDTO(syscall_number)) {
+      if(SCSENDTO(syscall_number)) {
         tracee = find_tracee(cid);
         peek_syscall_thrargs(cid, params);
         str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
