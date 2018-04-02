@@ -1,0 +1,7 @@
+FROM python:3.6-alpine
+
+RUN pip install flask requests
+
+COPY server.py server.py
+
+CMD python server.py
