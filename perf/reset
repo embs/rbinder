@@ -5,7 +5,7 @@ DEMOCOMPOSE=$DEMODIR/$DEMO/docker-compose.yml
 NO_TRACING_DEMO=no_tracing
 
 function sshcmd {
-  sshpass -p 123!qwe! ssh root@192.168.122.93 $1
+  sshpass -p 123!qwe! ssh root@alp $1
 }
 
 function composefiles {
@@ -28,5 +28,6 @@ while ! [[ $DEMO == $NO_TRACING_DEMO ]]; do
 done
 
 while [[ $DEMO == $NO_TRACING_DEMO ]]; do
-  curl --fail localhost:8000 && break
+  curl --fail alp:8000 && break
+  sleep 1
 done
