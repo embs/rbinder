@@ -319,6 +319,7 @@ int main(int argc, char **argv) {
         char newstr[newstrsize];
         inject_headers(str, tracee->headers, newstr, newstrsize);
         pokedata(cid, params[1], newstr, newstrsize);
+        free(str);
       }
 
       // Listen to next child syscall.
