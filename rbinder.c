@@ -2,6 +2,10 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/reg.h>
 #include <sys/syscall.h>
@@ -91,10 +95,6 @@ void pokedata(pid_t child, long addr, char *str, int len) {
       ptrace(PTRACE_POKEDATA, child, addr + i * 8, data.val);
   }
   ptrace(PTRACE_POKEUSER, child, 8 * RDX, len);
-}
-
-void trapsc(pid_t cid) {
-  ptrace(PTRACE_SYSCALL, cid, NULL, 0);
 }
 
 void peek_syscall_thrargs(pid_t cid, long *params) {
@@ -261,6 +261,30 @@ int main(int argc, char **argv) {
   // Start server within traced thread (just like a gdb inferior).
   if(child == 0) {
     ptrace(PTRACE_TRACEME, NULL, NULL, NULL);
+    /* If open syscall, trace */
+    struct sock_filter filter[] = {
+      BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_read, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_recvfrom, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_sendto, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = {
+      .filter = filter,
+      .len = (unsigned short) (sizeof(filter)/sizeof(filter[0])),
+    };
+    /* To avoid the need for CAP_SYS_ADMIN */
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
+      perror("prctl(PR_SET_NO_NEW_PRIVS)");
+      return 1;
+    }
+    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == -1) {
+      perror("prctl(PR_SET_SECCOMP)");
+      return 1;
+    }
     kill(getpid(), SIGSTOP);
     execv(argv[1], argv + 1);
   }
@@ -271,27 +295,25 @@ int main(int argc, char **argv) {
     // Setup ptrace for tracing further children threads.
     cid = waitpid(-1, &status, __WALL);
     if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
-          PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
+          PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK|\
+          PTRACE_O_TRACESECCOMP) < 0) {
       perror("ptrace(PTRACE_SETOPTIONS)");
       exit(1);
     }
-    // Listen to next child syscall.
-    trapsc(cid);
 
     while(1) {
       // Wait for tracees' activity.
+      ptrace(PTRACE_CONT, cid, NULL, NULL);
       cid = waitpid(-1, &status, __WALL);
+
+      if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
 
       syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
       syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
 
       // Skip if
-      //   - enter-stop for any syscall other than SENDTO;
-      //   - exit-stop for SENDTO; or
       //   - none tracees and syscall does not trigger tracee creation
-      if((SCENTRY(syscall_return) && !SCSENDTO(syscall_number)) || \
-          (!SCENTRY(syscall_return) && SCSENDTO(syscall_number)) || \
-          (!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
+      if((!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
 
       // Extract headers from incoming request.
       else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
@@ -300,7 +322,6 @@ int main(int argc, char **argv) {
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
         if(!is_http_request(str)) {
-          trapsc(cid);
           continue;
         }
 
@@ -320,7 +341,6 @@ int main(int argc, char **argv) {
 
         // Check if HTTP request.
         if(!is_http_request(str)) {
-          trapsc(cid);
           continue;
         }
 
@@ -331,8 +351,7 @@ int main(int argc, char **argv) {
         free(str);
       }
 
-      // Listen to next child syscall.
-      trapsc(cid);
+      } // PTRACE_EVENT_SECCOMP
     }
   }
 
