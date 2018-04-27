@@ -303,7 +303,7 @@ int main(int argc, char **argv) {
 
     while(1) {
       // Wait for tracees' activity.
-      ptrace(PTRACE_CONT, cid, NULL, NULL);
+      ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status));
       cid = waitpid(-1, &status, __WALL);
 
       if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
