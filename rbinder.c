@@ -97,10 +97,19 @@ void pokedata(pid_t child, long addr, char *str, int len) {
   ptrace(PTRACE_POKEUSER, child, 8 * RDX, len);
 }
 
+long peekuser(pid_t cid, unsigned int reg) {
+  long ret = ptrace(PTRACE_PEEKUSER, cid, reg, NULL);
+  if(errno < 0) {
+    perror("ptrace(PTRACE_PEEKUSER)");
+    exit(1);
+  }
+  return ret;
+}
+
 void peek_syscall_thrargs(pid_t cid, long *params) {
-  params[0] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_FRSTARG, NULL);
-  params[1] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_SCNDARG, NULL);
-  params[2] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_THRDARG, NULL);
+  params[0] = peekuser(cid, REG_SC_FRSTARG);
+  params[1] = peekuser(cid, REG_SC_SCNDARG);
+  params[2] = peekuser(cid, REG_SC_THRDARG);
 }
 
 /*
@@ -303,13 +312,16 @@ int main(int argc, char **argv) {
 
     while(1) {
       // Wait for tracees' activity.
-      ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status));
+      if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
+        perror("ptrace(PTRACE_CONT)");
+        exit(1);
+      }
       cid = waitpid(-1, &status, __WALL);
 
       if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
 
-      syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
-      syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
+      syscall_number = peekuser(cid, REG_SC_NUMBER);
+      syscall_return = peekuser(cid, REG_SC_RETCODE);
 
       // Skip if
       //   - none tracees and syscall does not trigger tracee creation
