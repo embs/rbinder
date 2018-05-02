@@ -309,61 +309,68 @@ int main(int argc, char **argv) {
       perror("ptrace(PTRACE_SETOPTIONS)");
       exit(1);
     }
+    if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
+      perror("ptrace(PTRACE_CONT)");
+      exit(1);
+    }
 
     while(1) {
       // Wait for tracees' activity.
+      cid = waitpid(-1, &status, __WALL);
+      if(WIFEXITED(status))
+        continue;
+
+      //if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
+
+      //syscall_number = peekuser(cid, REG_SC_NUMBER);
+      //syscall_return = peekuser(cid, REG_SC_RETCODE);
+
+      //// Skip if
+      ////   - none tracees and syscall does not trigger tracee creation
+      //if((!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
+
+      //// Extract headers from incoming request.
+      //else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
+      //  peek_syscall_thrargs(cid, params);
+      //  str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+      //  peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+
+      //  if(!is_http_request(str)) {
+      //    continue;
+      //  }
+
+      //  struct tracee_t tracee;
+      //  tracee.id = cid;
+      //  add_tracee(&tracee);
+      //  extract_headers(str, tracee.headers);
+      //  free(str);
+      //}
+
+      //// Inject headers into outgoing requests.
+      //else if(SCSENDTO(syscall_number)) {
+      //  tracee = find_tracee(cid);
+      //  peek_syscall_thrargs(cid, params);
+      //  str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+      //  peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+
+      //  // Check if HTTP request.
+      //  if(!is_http_request(str)) {
+      //    continue;
+      //  }
+
+      //  int newstrsize = strlen(str) + strlen(tracee->headers);
+      //  char newstr[newstrsize];
+      //  inject_headers(str, tracee->headers, newstr, newstrsize);
+      //  pokedata(cid, params[1], newstr, newstrsize);
+      //  free(str);
+      //}
+
+      //} // PTRACE_EVENT_SECCOMP
+
       if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
         perror("ptrace(PTRACE_CONT)");
         exit(1);
       }
-      cid = waitpid(-1, &status, __WALL);
-
-      if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
-
-      syscall_number = peekuser(cid, REG_SC_NUMBER);
-      syscall_return = peekuser(cid, REG_SC_RETCODE);
-
-      // Skip if
-      //   - none tracees and syscall does not trigger tracee creation
-      if((!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
-
-      // Extract headers from incoming request.
-      else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
-        peek_syscall_thrargs(cid, params);
-        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-
-        if(!is_http_request(str)) {
-          continue;
-        }
-
-        struct tracee_t tracee;
-        tracee.id = cid;
-        add_tracee(&tracee);
-        extract_headers(str, tracee.headers);
-        free(str);
-      }
-
-      // Inject headers into outgoing requests.
-      else if(SCSENDTO(syscall_number)) {
-        tracee = find_tracee(cid);
-        peek_syscall_thrargs(cid, params);
-        str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-        peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-
-        // Check if HTTP request.
-        if(!is_http_request(str)) {
-          continue;
-        }
-
-        int newstrsize = strlen(str) + strlen(tracee->headers);
-        char newstr[newstrsize];
-        inject_headers(str, tracee->headers, newstr, newstrsize);
-        pokedata(cid, params[1], newstr, newstrsize);
-        free(str);
-      }
-
-      } // PTRACE_EVENT_SECCOMP
     }
   }
 
