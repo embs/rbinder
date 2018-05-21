@@ -320,24 +320,27 @@ int main(int argc, char **argv) {
       if(WIFEXITED(status))
         continue;
 
-      //if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
+      syscall_number = peekuser(cid, REG_SC_NUMBER);
+      syscall_return = peekuser(cid, REG_SC_RETCODE);
 
-      //syscall_number = peekuser(cid, REG_SC_NUMBER);
-      //syscall_return = peekuser(cid, REG_SC_RETCODE);
+      if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
 
       //// Skip if
       ////   - none tracees and syscall does not trigger tracee creation
       //if((!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
 
       //// Extract headers from incoming request.
-      //else if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
-      //  peek_syscall_thrargs(cid, params);
+      if(SCREAD(syscall_number)) {
+        peek_syscall_thrargs(cid, params);
       //  str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
       //  peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
-      //  if(!is_http_request(str)) {
-      //    continue;
-      //  }
+        printf("seccomp %i %i %i %i\n", cid, syscall_number, syscall_return, params[0]);
+        if(ptrace(PTRACE_SYSCALL, cid, NULL, WSTOPSIG(status)) < 0) {
+          perror("ptrace(PTRACE_SYSCALL)");
+          exit(1);
+        }
+        continue;
 
       //  struct tracee_t tracee;
       //  tracee.id = cid;
@@ -345,6 +348,7 @@ int main(int argc, char **argv) {
       //  extract_headers(str, tracee.headers);
       //  free(str);
       //}
+      }
 
       //// Inject headers into outgoing requests.
       //else if(SCSENDTO(syscall_number)) {
@@ -366,6 +370,24 @@ int main(int argc, char **argv) {
       //}
 
       //} // PTRACE_EVENT_SECCOMP
+      } else {
+        if(SCREAD(syscall_number)) {
+          peek_syscall_thrargs(cid, params);
+          printf("%i %i %i %i\n", cid, syscall_number, syscall_return, params[0]);
+
+          if(syscall_return != -38) {
+            str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+            peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+            printf("str=%s\n", str);
+            free(str);
+            if(ptrace(PTRACE_CONT, cid, NULL, 0) < 0) {
+              perror("ptrace(PTRACE_CONT)");
+              exit(1);
+            }
+            continue;
+          }
+        }
+      }
 
       if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
         perror("ptrace(PTRACE_CONT)");
