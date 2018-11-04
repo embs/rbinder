@@ -275,7 +275,7 @@ int main(int argc, char **argv) {
   // Start server within traced thread (just like a gdb inferior).
   if(child == 0) {
     ptrace(PTRACE_TRACEME, NULL, NULL, NULL);
-    /* If open syscall, trace */
+    /* Filters for the syscalls we want to trace */
     struct sock_filter filter[] = {
       BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
       BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_read, 0, 1),
