@@ -2,9 +2,10 @@
 
 DEMODIR=./rbinder/demo
 DEMOCOMPOSE=$DEMODIR/$DEMO/docker-compose.yml
+NO_TRACING_DEMO=no_tracing
 
 function sshcmd {
-  sshpass -p 123!qwe! ssh root@192.168.122.93 $1
+  sshpass -p 123!qwe! ssh root@alp $1
 }
 
 function composefiles {
@@ -21,7 +22,12 @@ done
 
 dock $DEMOCOMPOSE "up -d --build"
 
-while true; do
+while ! [[ $DEMO == $NO_TRACING_DEMO ]]; do
   dock $DEMOCOMPOSE "logs zipkin" | grep Started && break
+  sleep 1
+done
+
+while [[ $DEMO == $NO_TRACING_DEMO ]]; do
+  curl --fail alp:8000 && break
   sleep 1
 done

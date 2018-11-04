@@ -2,6 +2,10 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/reg.h>
 #include <sys/syscall.h>
@@ -10,16 +14,8 @@
 #include "uthash.h"
 
 #define SCREAD(number)     (number == SYS_read)
-#define SCWRITE(number)    (number == SYS_write)
-#define SCCLOSE(number)    (number == SYS_close)
-#define SCDUP(number)      (number == SYS_dup)
-#define SCSOCKET(number)   (number == SYS_socket)
-#define SCCONNECT(number)  (number == SYS_connect)
-#define SCACCEPT(number)   (number == SYS_accept)
 #define SCSENDTO(number)   (number == SYS_sendto)
 #define SCRECVFROM(number) (number == SYS_recvfrom)
-#define SCSHUTDOWN(number) (number == SYS_shutdown)
-#define SCACCEPT4(number)  (number == SYS_accept4)
 
 #define SCENTRY(code) (code == -ENOSYS)
 
@@ -35,12 +31,8 @@
 #define REG_SC_SCNDARG (WORD_LENGTH * RSI)
 #define REG_SC_THRDARG (WORD_LENGTH * RDX)
 
-#define ARG_SCRW_FD       0
 #define ARG_SCRW_BUFF     1
 #define ARG_SCRW_BUFFSIZE 2
-
-#define ARG_SCSHUTDOWN_FD  0
-#define ARG_SCSHUTDOWN_HOW 1
 
 const int long_size = sizeof(long);
 
@@ -105,14 +97,19 @@ void pokedata(pid_t child, long addr, char *str, int len) {
   ptrace(PTRACE_POKEUSER, child, 8 * RDX, len);
 }
 
-void trapsc(pid_t cid) {
-  ptrace(PTRACE_SYSCALL, cid, NULL, 0);
+long peekuser(pid_t cid, unsigned int reg) {
+  long ret = ptrace(PTRACE_PEEKUSER, cid, reg, NULL);
+  if(errno < 0) {
+    perror("ptrace(PTRACE_PEEKUSER)");
+    exit(1);
+  }
+  return ret;
 }
 
 void peek_syscall_thrargs(pid_t cid, long *params) {
-  params[0] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_FRSTARG, NULL);
-  params[1] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_SCNDARG, NULL);
-  params[2] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_THRDARG, NULL);
+  params[0] = peekuser(cid, REG_SC_FRSTARG);
+  params[1] = peekuser(cid, REG_SC_SCNDARG);
+  params[2] = peekuser(cid, REG_SC_THRDARG);
 }
 
 /*
@@ -231,8 +228,6 @@ int is_http_request(char *str) {
  */
 struct tracee_t {
   pid_t id;
-  int socks[1024];
-  int socks_count;
   char headers[1024];
   UT_hash_handle hh;
 };
@@ -240,22 +235,8 @@ struct tracee_t {
 struct tracee_t *tracees = NULL;
 
 void add_tracee(struct tracee_t *s) {
-  int i;
-  for(i = 0; i < 1024; i++) {
-    s->socks[i] = 0;
-  }
   s->headers[0] = '\0';
   HASH_ADD_INT(tracees, id, s);
-}
-
-void add_sock(struct tracee_t *tracee, unsigned int fd) {
-  (*tracee).socks[fd] = 1;
-  (*tracee).socks_count = (*tracee).socks_count + 1;
-}
-
-void rmsock(struct tracee_t *tracee, unsigned int fd) {
-  tracee->socks[fd] = 0;
-  tracee->socks_count = tracee->socks_count - 1;
 }
 
 struct tracee_t *find_tracee(int tracee_id) {
@@ -283,12 +264,45 @@ int main(int argc, char **argv) {
   long params[3];
   char *str;
   struct tracee_t *tracee;
+  unsigned int open_socks[1024];
+
+  for(i = 0; i < 1024; i++) {
+    open_socks[i] = 0;
+  }
 
   child = fork();
 
   // Start server within traced thread (just like a gdb inferior).
   if(child == 0) {
     ptrace(PTRACE_TRACEME, NULL, NULL, NULL);
+    /* Filters for the syscalls we want to trace */
+    struct sock_filter filter[] = {
+      BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_read, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_close, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_accept, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_sendto, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_clone, 0, 1),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRACE),
+      BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = {
+      .filter = filter,
+      .len = (unsigned short) (sizeof(filter)/sizeof(filter[0])),
+    };
+    /* To avoid the need for CAP_SYS_ADMIN */
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
+      perror("prctl(PR_SET_NO_NEW_PRIVS)");
+      return 1;
+    }
+    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == -1) {
+      perror("prctl(PR_SET_SECCOMP)");
+      return 1;
+    }
     kill(getpid(), SIGSTOP);
     execv(argv[1], argv + 1);
   }
@@ -296,141 +310,166 @@ int main(int argc, char **argv) {
   // injecting them into outgoing requests performed while request is being
   // serviced.
   else {
+    // Setup ptrace for tracing further children threads.
+    cid = waitpid(-1, &status, __WALL);
+    if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
+          PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK|\
+          PTRACE_O_TRACESECCOMP) < 0) {
+      perror("ptrace(PTRACE_SETOPTIONS)");
+      exit(1);
+    }
+    if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
+      perror("ptrace(PTRACE_CONT)");
+      exit(1);
+    }
+
     while(1) {
       // Wait for tracees' activity.
       cid = waitpid(-1, &status, __WALL);
-
-      // Remove tracee if it exists.
       if(WIFEXITED(status)) {
-        struct tracee_t *tracee = find_tracee(cid);
+        tracee = find_tracee(cid);
         if(tracee) {
           rmtracee(tracee);
         }
         continue;
       }
 
-      // Setup ptrace for tracing further children threads.
-      if(ptrace(PTRACE_SETOPTIONS, cid, 0, PTRACE_O_TRACEEXEC|PTRACE_O_EXITKILL|\
-            PTRACE_O_TRACEVFORK|PTRACE_O_TRACECLONE|PTRACE_O_TRACEFORK) < 0) {
-        perror("ptrace(PTRACE_SETOPTIONS)");
-        exit(1);
-      }
+      syscall_number = peekuser(cid, REG_SC_NUMBER);
+      syscall_return = peekuser(cid, REG_SC_RETCODE);
 
-      syscall_number = ptrace(PTRACE_PEEKUSER, cid, REG_SC_NUMBER, NULL);
-      syscall_return = ptrace(PTRACE_PEEKUSER, cid, REG_SC_RETCODE, NULL);
+      if (status >> 8 == (SIGTRAP | (PTRACE_EVENT_SECCOMP << 8))) {
 
-      // Skip if syscall-entry-stop.
-      if(SCENTRY(syscall_return)) {
+      //// Skip if
+      ////   - none tracees and syscall does not trigger tracee creation
+      //if((!SCREAD(syscall_number) && HASH_COUNT(tracees) == 0)) {}
 
-        // Except for sys_write, which we want modify for injecting headers...
-        if(!SCSENDTO(syscall_number)) {
-          trapsc(cid);
-          continue;
-        }
-      }
-      // ...and don't care about its syscall-exit-stop.
-      else if(SCSENDTO(syscall_number)) {
-        trapsc(cid);
-        continue;
-      }
-
-      // Extract headers from incoming request.
-      if(SCREAD(syscall_number) || SCRECVFROM(syscall_number)) {
-        tracee = find_tracee(cid);
-
-        if(!tracee) {
-          trapsc(cid);
-          continue;
-        }
-
+      //// Extract headers from incoming request.
+      if(SCREAD(syscall_number)) {
         peek_syscall_thrargs(cid, params);
 
-        // Check if tracee owns socket & is not already servicing request.
-        if(tracee->socks[params[ARG_SCRW_FD]] == 1 && tracee->headers[0] == '\0') {
-          str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
-          peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
-          extract_headers(str, tracee->headers);
-          free(str);
-        }
-      }
-
-      // Remove socket from tracee.
-      if(SCCLOSE(syscall_number)) {
-        fd = ptrace(PTRACE_PEEKUSER, cid, REG_SC_FRSTARG, NULL);
-        tracee = find_tracee(cid);
-        if(tracee && tracee->socks[fd]==1) {
-          rmsock(tracee, fd);
-        }
-      }
-
-      // Add dupped socket to tracee if it is a dup from already owned socket.
-      if(SCDUP(syscall_number)) {
-        tracee = find_tracee(cid);
-        fd = ptrace(PTRACE_PEEKUSER, cid, 8 * RDI, NULL);
-        if(tracee && tracee->socks[fd]) {
-          add_sock(tracee, syscall_return);
-        }
-      }
-
-      // Add socket to tracee.
-      if(SCSOCKET(syscall_number) || SCACCEPT(syscall_number) || SCACCEPT4(syscall_number)) {
-        tracee = find_tracee(cid);
-        if(tracee) {
-          add_sock(tracee, syscall_return);
-        } else {
-          struct tracee_t tracee;
-          tracee.id = cid;
-          tracee.socks[0] = syscall_return;
-          tracee.socks_count = 1;
-          add_tracee(&tracee);
-        }
-      }
-
-      // Inject headers when performing request while servicing another one.
-      if(SCSENDTO(syscall_number)) {
-        tracee = find_tracee(cid);
-        if(!tracee) {
+        // Inject a new trap if this is a read on an open socket so we can
+        // examine syscall results.
+        if(open_socks[params[0]] == 1) {
+          if(ptrace(PTRACE_SYSCALL, cid, NULL, WSTOPSIG(status)) < 0) {
+            perror("ptrace(PTRACE_SYSCALL)");
+            exit(1);
+          }
           continue;
         }
+      } // SYS_read
+      else if(syscall_number == SYS_close) {
+        peek_syscall_thrargs(cid, params);
 
+        // Mark socket as not open if it was open and is being closed.
+        if(open_socks[params[0]] == 1) {
+          open_socks[params[0]] = 0;
+        }
+      } // SYS_close
+      else if(syscall_number == SYS_accept) {
+        if(ptrace(PTRACE_SYSCALL, cid, NULL, WSTOPSIG(status)) < 0) {
+          perror("ptrace(PTRACE_SYSCALL)");
+          exit(1);
+        }
+        continue;
+      } // SYS_accept
+
+      //// Inject headers into outgoing requests.
+      else if(SCSENDTO(syscall_number)) {
+        tracee = find_tracee(cid);
         peek_syscall_thrargs(cid, params);
         str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
         peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
 
         // Check if HTTP request.
-        if(!is_http_request(str)) {
-          trapsc(cid);
-          continue;
-        }
+        if(is_http_request(str)) {
+          if(!tracee) {
+            perror("Tracee not found when injecting headers into outgoing request");
+            exit(1);
+          }
 
-        // Check if tracee owns socket.
-        if(tracee->socks[params[ARG_SCRW_FD]] == 1) {
           int newstrsize = strlen(str) + strlen(tracee->headers);
           char newstr[newstrsize];
           inject_headers(str, tracee->headers, newstr, newstrsize);
           pokedata(cid, params[1], newstr, newstrsize);
         }
+
+        free(str);
+      } // SYS_sendto
+      else if(syscall_number == SYS_clone) {
+        if(ptrace(PTRACE_SYSCALL, cid, NULL, WSTOPSIG(status)) < 0) {
+          perror("ptrace(PTRACE_SYSCALL)");
+          exit(1);
+        }
+        continue;
+      } // SYS_clone
+
+      //} // PTRACE_EVENT_SECCOMP
+      } else {
+        if(SCREAD(syscall_number)) {
+          peek_syscall_thrargs(cid, params);
+
+          if(syscall_return != -38) {
+            str = (char *)calloc(1, (params[ARG_SCRW_BUFFSIZE]+1) * sizeof(char));
+            peekdata(cid, params[ARG_SCRW_BUFF], str, params[ARG_SCRW_BUFFSIZE]);
+            if(is_http_request(str)) {
+              tracee = malloc(sizeof(struct tracee_t));
+              tracee->id = cid;
+              add_tracee(tracee);
+              extract_headers(str, tracee->headers);
+            }
+            free(str);
+            if(ptrace(PTRACE_CONT, cid, NULL, 0) < 0) {
+              perror("ptrace(PTRACE_CONT)");
+              exit(1);
+            }
+            continue;
+          }
+        } // SYS_read
+        else if(syscall_number == SYS_accept) {
+          if(syscall_return != -38) {
+            if(syscall_return > 0) { // Note: 0 is a valid file descriptor.
+              open_socks[syscall_return] = 1;
+            }
+            if(ptrace(PTRACE_CONT, cid, NULL, 0) < 0) {
+              perror("ptrace(PTRACE_CONT)");
+              exit(1);
+            }
+            continue;
+          }
+        } // SYS_accept
+        else if(syscall_number == SYS_clone) {
+          if(syscall_return != -38) {
+            if(syscall_return > 0) {
+              tracee = find_tracee(cid);
+              if(tracee) {
+                struct tracee_t *cloned;
+                cloned = malloc(sizeof(struct tracee_t));
+                cloned->id = syscall_return;
+                add_tracee(cloned);
+                for(i = 0; i < 1024; i++) {
+                  cloned->headers[i] = tracee->headers[i];
+                }
+              }
+            }
+            if(ptrace(PTRACE_CONT, cid, NULL, 0) < 0) {
+              perror("ptrace(PTRACE_CONT)");
+              exit(1);
+            }
+            continue;
+          } else {
+            if(ptrace(PTRACE_SYSCALL, cid, NULL, 0) < 0) {
+              perror("ptrace(PTRACE_SYSCALL)");
+              exit(1);
+            }
+            continue;
+          }
+        } // SYS_clone
       }
 
-      // Nullify tracee headers as per request completion.
-      if(SCSHUTDOWN(syscall_number)) {
-        tracee = find_tracee(cid);
-        if(!tracee) {
-          continue;
-        }
-
-        params[ARG_SCSHUTDOWN_FD] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_FRSTARG,
-                                           NULL);
-        params[ARG_SCSHUTDOWN_HOW] = ptrace(PTRACE_PEEKUSER, cid, REG_SC_SCNDARG,
-                                            NULL);
-
-        if(tracee->socks[params[ARG_SCSHUTDOWN_FD]] == 1) {
-          tracee->headers[0] = '\0';
-        }
+      if(ptrace(PTRACE_CONT, cid, NULL, WSTOPSIG(status)) < 0) {
+        perror("ptrace(PTRACE_CONT)");
+        exit(1);
       }
-
-      // Listen to next child syscall.
-      trapsc(cid);
     }
   }
 
