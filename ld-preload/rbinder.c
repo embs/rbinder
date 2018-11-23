@@ -121,17 +121,65 @@ void extract_headers(char *str, char *headers) {
   }
 }
 
+void inject_headers(const char *str, char *headers, char *newstr, int newstrsize) {
+  int i, j;
+  int stridx = 0;
+  int injected = 0;
+
+  for(i = 0; i < newstrsize; i++) {
+    newstr[i] = str[stridx];
+    if(str[stridx] == '\n' && str[stridx+1] == '\r' && injected == 0) {
+      for(j = 0; j < strlen(headers); j++) {
+        newstr[i+1+j] = headers[j];
+      }
+      i += strlen(headers);
+      injected = 1;
+    }
+    ++stridx;
+  }
+  newstr[newstrsize] = '\0';
+}
+
+int is_http_request(const char *str) {
+  char *httpmeths[9] = {
+    "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"
+  };
+  int i;
+  for(i = 0; i < 9; i++) {
+    if(strncmp(str, httpmeths[i], strlen(httpmeths[i])) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static int open_socks[1024] = {[0 ... 1023] = 0};
 
 static ssize_t (*real_read)(int filedes, void *buffer, size_t size) = NULL;
 static int (*real_close)(int filedes) = NULL;
 static int (*real_accept)(int socket, struct sockaddr *addr, socklen_t *length_ptr) = NULL;
-static int (*real_sendto)(int socket, void *buffer. size_t size, int flags, struct sockaddr *addr, socklen_t length) = NULL;
+static int (*real_sendto)(int socket, const void *buffer, size_t size, int flags, const struct sockaddr *addr, socklen_t length) = NULL;
+static int (*real_execv)(const char *path, char *const argv[]) = NULL; // REMOVE
+static int (*real_execve)(const char *filename, char * const argv[], char * const envp[]) = NULL; // REMOVE
+
+int execv (const char *path, char *const argv[]) { //REMOVE
+  real_execv = dlsym(RTLD_NEXT, "execv");
+  printf("\n\n\nEXECV\n\n\n");
+
+  return real_execv(path, argv);
+}
+
+int execve(const char *filename, char * const argv[], char * const envp[]) { //REMOVE
+  real_execve = dlsym(RTLD_NEXT, "execve");
+  printf("\n\n\nEXECVE\n\n\n");
+
+  return real_execve(filename, argv, envp);
+}
 
 ssize_t read(int filedes, void *buffer, size_t size) {
   real_read = dlsym(RTLD_NEXT, "read"); // TODO INITIALIZE ONLY ONCE
   ssize_t ret = real_read(filedes, buffer, size);
-  if(open_socks[filedes]) {
+  if(open_socks[filedes] && is_http_request(buffer)) {
     printf("READ tid=%i fd=%i buffer=%s\n", syscall(__NR_gettid), filedes, buffer);
     struct tracee_t *tracee = malloc(sizeof(struct tracee_t)); // TODO FREE
     tracee->id = syscall(__NR_gettid);
@@ -160,9 +208,24 @@ int accept(int socket, struct sockaddr *addr, socklen_t *length_ptr) {
   return fd;
 }
 
-int sendto(int socket, void *buffer. size_t size, int flags, struct sockaddr *addr, socklen_t length) {
+ssize_t sendto(int socket, const void *buffer, size_t size, int flags, const struct sockaddr *addr, socklen_t length) {
   real_sendto = dlsym(RTLD_NEXT, "sendto");
-  int ret = real_sendto(socket, buffer, size, flags, addr, length);
+  int ret;
+
+  struct tracee_t *tracee = find_tracee(syscall(__NR_gettid));
+  if(is_http_request(buffer)) {
+    if(!tracee) {
+      perror("Tracee not found when injecting headers into outgoing request");
+      exit(1);
+    }
+
+    int newstrsize = strlen(buffer) + strlen(tracee->headers);
+    char newstr[newstrsize];
+    inject_headers(buffer, tracee->headers, newstr, newstrsize);
+    ret = real_sendto(socket, newstr, newstrsize, flags, addr, length);
+  } else {
+    ret = real_sendto(socket, buffer, size, flags, addr, length);
+  }
 
   return ret;
 }
